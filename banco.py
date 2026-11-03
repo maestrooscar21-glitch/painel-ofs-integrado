@@ -116,9 +116,11 @@ def _carregar_ofs_integrado() -> pd.DataFrame:
             "data_portal": ["Data Portal", "data_portal"],
         }
         for destino, chaves in campos.items():
-            df[destino] = json_rows.map(lambda d: next((d[k] for k in chaves if k in d and d[k] is not None), None))
+            if destino not in df.columns:
+                df[destino] = json_rows.map(lambda d: next((d[k] for k in chaves if k in d and d[k] is not None), None))
     for col in ("data", "data_ref"):
-        df[col] = pd.to_datetime(df[col], errors="coerce").dt.date
+        if col in df.columns:
+            df[col] = pd.to_datetime(df[col], errors="coerce").dt.date
     if "tipo_atividade" in df.columns:
         from regras import familia_servico
         df["familia"] = df["tipo_atividade"].map(familia_servico)
@@ -191,28 +193,35 @@ COLS_OFICINA = ["id", "oficina", "tipo", "cidade_base", "uf_base", "consultor", 
 
 @st.cache_data(ttl=300)
 def carregar_oficinas() -> pd.DataFrame:
-if not _existe("oficinas"):
-    return pd.DataFrame(columns=COLS_OFICINA)
-if modo_integrado():
-        df = pd.read_sql(text("""
-            SELECT
-                COALESCE(NULLIF(codigo_oficina, ''), id::text) AS id,
-                nome_oficina AS oficina,
-                cidade AS cidade_base,
-                uf AS uf_base,
-                consultor,
-                prioridade,
-                ativa,
-                observacoes AS observacao,
-                'Credenciada'::text AS tipo
-            FROM public.oficinas
-        """), motor())
+    """Lê o cadastro existente, adaptando os nomes para o formato do painel."""
+    if modo_integrado():
+        # Consulta somente leitura. Não pressupõe colunas opcionais no Supabase.
+        df = pd.read_sql(text("SELECT * FROM public.oficinas"), motor())
+        aliases = {
+            "codigo_oficina": "id",
+            "nome_oficina": "oficina",
+            "cidade": "cidade_base",
+            "uf": "uf_base",
+            "observacoes": "observacao",
+        }
+        for origem, destino in aliases.items():
+            if origem in df.columns and destino not in df.columns:
+                df = df.rename(columns={origem: destino})
+        # O identificador cadastral pode estar ausente ou vazio.
+        if "id" not in df.columns:
+            df["id"] = df.index.astype(str)
+        elif "codigo_oficina" in df.columns:
+            codigo = df["codigo_oficina"].astype("string").str.strip()
+            df["id"] = codigo.where(codigo.notna() & codigo.ne(""), df["id"].astype("string"))
     else:
-        df = pd.read_sql("SELECT * FROM oficinas", motor())
-    df["id"] = df["id"].astype(str)
+        if not _existe("oficinas"):
+            return pd.DataFrame(columns=COLS_OFICINA)
+        df = pd.read_sql(text("SELECT * FROM oficinas"), motor())
+
     for c in COLS_OFICINA:
         if c not in df.columns:
             df[c] = None
+    df["id"] = df["id"].astype(str)
     df["tecnicos"] = pd.to_numeric(df["tecnicos"], errors="coerce")
     df["valor_fixo"] = pd.to_numeric(df["valor_fixo"], errors="coerce")
     df["contrato"] = df["contrato"].fillna("Tabela")
