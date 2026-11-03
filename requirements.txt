@@ -1,0 +1,8 @@
+streamlit>=1.50
+pandas>=2.0
+SQLAlchemy>=2.0
+psycopg2-binary>=2.9
+psycopg[binary]>=3.1
+openpyxl>=3.1
+altair>=5
+reportlab>=4

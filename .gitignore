@@ -1,0 +1,5 @@
+.streamlit/secrets.toml
+dados_painel.db
+__pycache__/
+*.csv
+*.xlsx
