@@ -191,9 +191,24 @@ COLS_OFICINA = ["id", "oficina", "tipo", "cidade_base", "uf_base", "consultor", 
 
 @st.cache_data(ttl=300)
 def carregar_oficinas() -> pd.DataFrame:
-    if not _existe("oficinas"):
-        return pd.DataFrame(columns=COLS_OFICINA)
-    df = pd.read_sql("SELECT * FROM oficinas", motor())
+if not _existe("oficinas"):
+    return pd.DataFrame(columns=COLS_OFICINA)
+if modo_integrado():
+        df = pd.read_sql(text("""
+            SELECT
+                COALESCE(NULLIF(codigo_oficina, ''), id::text) AS id,
+                nome_oficina AS oficina,
+                cidade AS cidade_base,
+                uf AS uf_base,
+                consultor,
+                prioridade,
+                ativa,
+                observacoes AS observacao,
+                'Credenciada'::text AS tipo
+            FROM public.oficinas
+        """), motor())
+    else:
+        df = pd.read_sql("SELECT * FROM oficinas", motor())
     df["id"] = df["id"].astype(str)
     for c in COLS_OFICINA:
         if c not in df.columns:
